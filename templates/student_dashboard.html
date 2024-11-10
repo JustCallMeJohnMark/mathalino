@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <title>Student's Dashboard</title>
+</head>
+<body>
+    <div class="dashboard">
+        <h1>Welcome, {{ username }}!</h1>
+        <h2>Your Recent Test Results</h2>
+
+        {% if recent_scores %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Score (%)</th>
+                    <th>Proficiency</th>
+                    <th>Date Taken</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for score in recent_scores %}
+                    <tr>
+                        <td>{{ "{:.2f}".format(score.score) }}%</td>
+                        <td>{{ score.proficiency }}</td>
+                        <td>{{ score.date_taken }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <p>You have not taken any tests yet. <a href="{{ url_for('quiz') }}">Take a quiz now!</a></p>
+        {% endif %}
+        <div class="button-container">
+            <button class="button cta"><a href="{{ url_for('quiz') }}">Take a New Quiz</a></button>
+            <button class="button cta"><a href="{{ url_for('logout') }}">Logout</a></button>
+        </div>
+    </div>
+</body>
+</html>

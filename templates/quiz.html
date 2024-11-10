@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <title>Math Quiz</title>
+</head>
+<body>
+    <div class="quiz">
+        <h1>Math Quiz</h1>
+        <p id="timer">Time left: 12 minutes 0 seconds</p>
+
+        <form id="quizForm" action="/quiz" method="POST">
+            {% for question in questions %}
+                <div class="question">
+                    <!-- Progress indicator for answered items -->
+                    <p id="progress">Question {{ loop.index }} of {{ questions|length }}</p> 
+
+                    <p>{{ question[1] }}</p>
+                    <input type="hidden" name="{{ question[0] }}" value="{{ question[0] }}">
+                    <input type="text" name="answer_{{ question[0] }}" placeholder="Enter your answer" required>
+                    <button class="key" value="7">7</button>
+                    <button class="key" value="8">8</button>
+                    <button class="key" value="9">9</button>
+                    <br>
+                    <button class="key" value="4">4</button>
+                    <button class="key" value="5">5</button>
+                    <button class="key" value="6">6</button>
+                    <br>
+                    <button class="key" value="1">1</button>
+                    <button class="key" value="2">2</button>
+                    <button class="key" value="3">3</button>
+                    <br>
+                    <button class="key" value="del">Del</button>
+                    <button class="key" value="0">0</button>
+                    <button class="key" id="next" onclick="nextQuestion(event)">Next</button>
+                </div>
+            {% endfor %}
+            <input type="hidden" name="total_time_spent" id="total_time_spent">
+            <input type="hidden" name="time_per_question" id="time_per_question" value="[]">
+            <button type="submit" id="submitQuiz" style="display: none;">Submit</button>
+        </form>
+    </div>
+
+    <script>
+        let totalTime = 720; // Set total timer (in seconds)
+        let currentQuestion = 0; // Start with the first question
+        let timePerQuestion = []; // Array to store time spent on each question
+        let questionStartTime = Date.now(); // Track when the current question started
+        let inputField; // Track the current input field
+
+        // Start countdown timer
+        function startTimer() {
+            const timerElement = document.getElementById('timer');
+            const timerInterval = setInterval(() => {
+                if (totalTime <= 0) {
+                    clearInterval(timerInterval);
+                    submitQuiz(); // Auto-submit the form when time is up
+                } else {
+                    const minutes = Math.floor(totalTime / 60); // Calculate minutes
+                    const seconds = totalTime % 60; // Calculate remaining seconds
+                    timerElement.textContent = `Time left: ${minutes} minutes ${seconds} seconds`;
+                    totalTime--;
+                }
+            }, 1000);
+        }
+
+        // Show current question and start timing
+        function showQuestion(index) {
+            const questions = document.querySelectorAll('.question');
+            questions.forEach((question, idx) => {
+                question.style.display = idx === index ? 'block' : 'none'; // Show current question
+            });
+            inputField = questions[index].querySelector('input[type="text"]'); // Set the inputField to the current question
+            questionStartTime = Date.now(); // Update start time for current question
+            document.getElementById('progress').textContent = `Question ${index + 1} of ${questions.length}`; // Update progress
+            console.log(`Started question ${index + 1} at ${questionStartTime}`);
+        }
+
+        // Track time spent per question and move to the next
+        function nextQuestion(event) {
+            event.preventDefault();
+            const totalQuestions = document.querySelectorAll('.question').length;
+
+            // Calculate time spent on the current question
+            const timeSpent = Math.floor((Date.now() - questionStartTime) / 1000);
+            timePerQuestion[currentQuestion] = timeSpent; // Save time for this question
+
+            console.log(`Question ${currentQuestion + 1} took ${timeSpent} seconds`);
+
+            if (currentQuestion < totalQuestions - 1) {
+                currentQuestion++; // Move to the next question
+                showQuestion(currentQuestion);
+            } else {
+                submitQuiz(); // Last question, submit quiz
+            }
+        }
+
+        function submitQuiz() {
+            const totalTimeSpent = timePerQuestion.reduce((sum, time) => sum + time, 0);
+            document.getElementById('total_time_spent').value = totalTimeSpent;
+            document.getElementById('time_per_question').value = JSON.stringify(timePerQuestion);
+
+            console.log("Total Time Spent:", document.getElementById('total_time_spent').value);
+            console.log("Time Per Question:", document.getElementById('time_per_question').value);
+
+            document.getElementById('quizForm').submit();
+        }
+
+        // Initialize quiz on page load
+        window.onload = function () {
+            startTimer(); // Start the timer
+            showQuestion(currentQuestion); // Show the first question
+        }
+
+        // Button functionality for number inputs
+        document.querySelectorAll('.key').forEach(button => {
+            button.addEventListener('click', (event) => {
+                if (inputField) {
+                    const buttonValue = event.target.value;
+                    const currentValue = inputField.value;
+
+                    if (buttonValue === 'del') {
+                        inputField.value = currentValue.slice(0, -1); // Delete last character
+                    } else {
+                        inputField.value = currentValue + buttonValue; // Append button value
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <title>Quiz Result</title>
+</head>
+<body>
+    <div class="result">
+        <h1>Quiz Result</h1>
+        <p>You answered correctly {{ correct_answers | default(0) }} out of {{ total_questions | default(0) }} questions.</p>
+        <p>Your score percentage is: <strong>{{ score | default(0) }}%</strong></p>
+        <p>Your proficiency level is: <strong>{{ proficiency | default('Not Assessed') }}</strong></p>
+
+        {% if predicted_score is not none %}
+            <p>Predicted Next Score Percentage: {{ "%.2f" | format(predicted_score) }}%</p>
+
+            {% set predicted_score_min = (predicted_score * 0.95) * 0.4 %}
+            {% set predicted_score_max = (predicted_score * 1.05) * 0.4 %}
+            
+            <p>This is approximately <strong>{{ "%.0f" | format(predicted_score_min) }} - {{ "%.0f" | format(predicted_score_max) }} out of 40</strong> items.</p>
+        {% else %}
+            <p>Predicted Next Score Percentage: N/A</p>
+            <p>This is approximately <strong>N/A</strong> out of 40 items.</p>
+        {% endif %}
+
+        <a class="button cta" href="{{ url_for('student_dashboard') }}">View Dashboard</a>
+    </div>
+</body>
+</html>

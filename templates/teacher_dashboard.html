@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" 
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" 
+    integrity="sha512-Kc323vGBEqzTmouAECnVceyQqyqdsSiqLQISBL29aUW4U/M7pSPA/gEUZQqv1cwx4OnYxTxve5UMg5GT6L4JJg==" 
+    crossorigin="anonymous" 
+    referrerpolicy="no-referrer">
+    <title>Teacher Dashboard</title>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <img src="{{ url_for('static', filename='img/white.png') }}" alt="Logo">
+        </div>
+        <nav>
+            <ul>
+                <li><a href="#">Home</a></li>
+                <li><a href="#">About</a></li>
+                <li><a href="#">Contact</a></li>
+                <li><a href="{{ url_for('logout') }}" class="logout-btn">Logout</a></li>
+            </ul>
+        </nav>
+    </header>
+    <div class="tboard">
+        <div class="header">
+            <h1>Welcome, Ma'am/Sir {{ teacher_name }}!</h1>
+        </div>
+        <div class="graphBox">
+            <div class="box">
+                <canvas id="myPieChart"></canvas>
+            </div>
+            <div class="box">
+                <canvas id="myBarChart"></canvas>
+            </div>
+        </div>
+
+        <div class="list">
+            <div class="header-flex">
+                <h2>Recent Student Results</h2>
+                <div class="controls">
+                    <label for="proficiency-filter">
+                    Filter by Proficiency:
+                    </label>
+                    <select id="proficiency-filter" onchange="filterResults()">
+                        <option value="all">All</option>
+                        <option value="Highly Proficient">Highly Proficient</option>
+                        <option value="Proficient">Proficient</option>
+                        <option value="Nearly Proficient">Nearly Proficient</option>
+                        <option value="Low Proficient">Low Proficient</option>
+                        <option value="Not Proficient">Not Proficient</option>
+                    </select>
+                    <button class="downloadcsv" onclick="downloadCSV()">Download</button>
+                    <button class="sort-button" aria-label="Sort by Name" onclick="toggleSortByName()">
+                        <i class="fas fa-sort-alpha-down"></i> Sort by Name
+                    </button>
+                    <button class="sort-button" aria-label="Sort by Score" onclick="toggleSortByScore()">
+                        <i class="fas fa-sort-numeric-down"></i> Sort by Score
+                    </button>
+                </div>
+            </div>
+            {% if recent_results %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>Student Name</th>
+                        <th>Section</th>
+                        <th>Age</th>
+                        <th>Gender</th>
+                        <th>Score %</th>
+                        <th>Proficiency</th>
+                        <th>Date Taken</th>
+                        <th>Predicted Score</th>
+                    </tr>
+                </thead>
+                <tbody id="student-results-body">
+                    {% for student in recent_results %}
+                    <tr onclick="toggleResults({{ student.student_id }})" style="cursor: pointer;" data-proficiency="{{ student.latest_result.proficiency }}" data-score="{{ student.latest_result.score }}">
+                        <td>{{ loop.index }}</td>
+                        <td>{{ student.username }}</td>
+                        <td>{{ student.section }}</td>
+                        <td>{{ student.age }}</td>
+                        <td>{{ student.gender }}</td>
+                        <td>{{ student.latest_result.score }}%</td>
+                        <td>{{ student.latest_result.proficiency }}</td>
+                        <td>{{ student.latest_result.date_taken }}</td>
+                        <td>
+                            <button onclick="showPredictedScore({{ teacher_id }})">Predict Score</button>
+                        </td>
+                    </tr>
+                    {% for result in student.all_results %}
+                    <tr class="student-{{ student.student_id }}" style="display: none;">
+                        <td></td>
+                        <td colspan="2" style="text-align: left;">Quiz {{ loop.index }}</td>
+                        <td colspan="4">Proficiency: {{ result.proficiency }} | Score: {{ result.score }}%</td>
+                        <td>Date Taken: {{ result.date_taken }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+                <p>No recent results.</p>
+            {% endif %}
+        </div>
+    </div>
+    <div id="prediction-modal" style="display: none;" onclick="closeModal()">
+        <div id="loading-spinner" class="spinner" style="display: none;"></div>
+        <div class="modal-content" onclick="event.stopPropagation();">
+            <i class="fa-solid fa-x" onclick="closeModal()"></i>
+            <h2>Predicted Score for Next Test</h2>
+            <p id="predicted-score-text" class="predicted-score">Loading...</p>
+            <div id="score-details">
+                <p><strong>Time Spent on Last Test:</strong> <span id="last-time-spent">N/A</span> minutes</p>
+                <p><strong>Average Time per Question:</strong> <span id="average-time-per-question">N/A</span> seconds</p>
+            </div>
+            <div id="historical-scores">
+                <h3>Previous Scores</h3>
+                <ul id="previous-scores-list"></ul>
+            </div>
+            <div id="suggestions">
+                <p><em>Keep practicing to improve your timing and accuracy for a better score!</em></p>
+            </div>   
+        </div>
+    </div>
+
+<script>
+        document.addEventListener("DOMContentLoaded", function() {
+        // Close button click event
+        document.getElementById("prediction-modal").addEventListener("click", closeModal);
+
+        // Prevent closing when clicking inside modal content
+        document.querySelector(".modal-content").addEventListener("click", function(event) {
+            event.stopPropagation();
+        });
+    });
+
+    function showPredictedScore(teacherId) {
+        // Show loading spinner
+        document.getElementById("predicted-score-text").innerText = "Loading...";
+        document.getElementById("loading-spinner").style.display = "block";
+
+        fetch(`/predict_teacher_score?teacher_id=${teacherId}`)
+            .then(response => response.json())
+            .then(data => {
+                // Hide loading spinner
+                document.getElementById("loading-spinner").style.display = "none";
+
+                if (data.predicted_score !== undefined) {
+                    document.getElementById("predicted-score-text").innerText = `Predicted Score: ${data.predicted_score.toFixed(2)}%`;
+                    document.getElementById("last-time-spent").innerText = `${data.avg_time_spent || 'N/A'}`;
+                    document.getElementById("average-time-per-question").innerText = `${data.avg_time_per_question ? data.avg_time_per_question.toFixed(2) : 'N/A'}`;
+
+                    // Populate previous scores if available
+                    const previousScoresList = document.getElementById("previous-scores-list");
+                    previousScoresList.innerHTML = ''; // Clear previous content
+                    if (data.previous_scores) {
+                        data.previous_scores.forEach(score => {
+                            let listItem = document.createElement("li");
+                            listItem.innerText = `${score.date}: ${score.score}%`;
+                            previousScoresList.appendChild(listItem);
+                        });
+                    }
+                } else if (data.error) {
+                    document.getElementById("predicted-score-text").innerText = `Error: ${data.error}`;
+                }
+
+                // Show modal after receiving response
+                document.getElementById("prediction-modal").style.display = "block";
+            })
+            .catch(error => {
+                // Hide loading spinner
+                document.getElementById("loading-spinner").style.display = "none";
+                
+                // Display error message
+                document.getElementById("predicted-score-text").innerText = `An error occurred: ${error.message}`;
+                document.getElementById("prediction-modal").style.display = "block";
+            });
+    }
+        function closeModal() {
+        const modal = document.getElementById("prediction-modal");
+        if (modal) {
+            modal.style.display = "none";
+        }
+    }
+
+
+    let nameSortAscending = true;
+    let scoreSortAscending = true;
+
+    function filterResults() {
+        const filter = document.getElementById("proficiency-filter").value;
+        const rows = document.querySelectorAll(".list table tbody tr");
+
+        rows.forEach(row => {
+            const proficiency = row.getAttribute("data-proficiency");
+            if (row.rowIndex === 0 || (filter === "all" || proficiency === filter)) { // Skip header row
+                row.style.display = "";
+            } else {
+                row.style.display = "none";
+            }
+        });
+    }
+
+    function downloadCSV() {
+        const rows = [];
+        const tableRows = document.querySelectorAll(".list table tbody tr");
+
+        const headers = ["No.", "Student Name", "Section", "Age", "Gender", "Score %", "Proficiency", "Date Taken"];
+        rows.push(headers.join(","));
+
+        tableRows.forEach(row => {
+            const cells = row.querySelectorAll("td");
+            if (cells.length > 0) {
+                const rowData = Array.from(cells).map(cell => cell.textContent.trim());
+                rows.push(rowData.join(","));
+            }
+        });
+
+        const csvContent = rows.join("\n");
+        const blob = new Blob([csvContent], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const downloadLink = document.createElement("a");
+        downloadLink.href = url;
+        downloadLink.download = "student_results.csv";
+        downloadLink.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function toggleResults(studentId) {
+        const rows = document.querySelectorAll(`.student-${studentId}`);
+        rows.forEach(row => {
+            row.style.display = row.style.display === "none" ? "table-row" : "none";
+        });
+    }
+
+    function toggleSortByName() {
+        const tbody = document.getElementById("student-results-body");
+        const rows = Array.from(tbody.querySelectorAll("tr")).slice(1); // Skip header row
+        rows.sort((a, b) => {
+            const nameA = a.cells[1].textContent.toLowerCase();
+            const nameB = b.cells[1].textContent.toLowerCase();
+            return nameSortAscending ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+        });
+        nameSortAscending = !nameSortAscending; // Toggle sort order
+
+        // Update icon based on sort order
+        const icon = document.getElementById("name-sort-icon");
+        icon.src = nameSortAscending ? "{{ url_for('static', filename='img/sort-asc.png') }}" : "{{ url_for('static', filename='img/sort-desc.png') }}";
+
+        rows.forEach(row => tbody.appendChild(row)); // Re-append sorted rows
+    }
+
+    function toggleSortByScore() {
+        const tbody = document.getElementById("student-results-body");
+        const rows = Array.from(tbody.querySelectorAll("tr")).slice(1); // Skip header row
+        rows.sort((a, b) => {
+            const scoreA = parseFloat(a.getAttribute("data-score"));
+            const scoreB = parseFloat(b.getAttribute("data-score"));
+            return scoreSortAscending ? scoreB - scoreA : scoreA - scoreB; // Toggle sort order
+        });
+        scoreSortAscending = !scoreSortAscending; // Toggle sort order
+
+        // Update icon based on sort order
+        const icon = document.getElementById("score-sort-icon");
+        icon.src = scoreSortAscending ? "{{ url_for('static', filename='img/sort-asc.png') }}" : "{{ url_for('static', filename='img/sort-desc.png') }}";
+
+        rows.forEach(row => tbody.appendChild(row)); // Re-append sorted rows
+    }
+
+    const recentResults = {{ recent_results | tojson }};
+    
+    if (recentResults.length > 0) {
+        const proficiencyCounts = {
+            'Highly Proficient': 0,
+            'Proficient': 0,
+            'Nearly Proficient': 0,
+            'Low Proficient': 0,
+            'Not Proficient': 0
+        };
+
+        recentResults.forEach(student => {
+            const proficiency = student.latest_result.proficiency;
+            proficiencyCounts[proficiency] = (proficiencyCounts[proficiency] || 0) + 1;
+        });
+
+        const pieChartData = {
+            labels: Object.keys(proficiencyCounts),
+            datasets: [{
+                label: 'Total Number of Students',
+                data: Object.values(proficiencyCounts),
+                backgroundColor: [
+                    '#FF6384',
+                    '#36A2EB',
+                    '#FFCE56',
+                    '#4BC0C0',
+                    '#9966FF'
+                ]
+            }]
+        };
+
+        const pieCtx = document.getElementById('myPieChart').getContext('2d');
+        new Chart(pieCtx, {
+            type: 'pie',
+            data: pieChartData,
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                }
+            }
+        });
+
+        const maleProficiencyCounts = {
+            'Highly Proficient': 0,
+            'Proficient': 0,
+            'Nearly Proficient': 0,
+            'Low Proficient': 0,
+            'Not Proficient': 0
+        };
+
+        const femaleProficiencyCounts = {
+            'Highly Proficient': 0,
+            'Proficient': 0,
+            'Nearly Proficient': 0,
+            'Low Proficient': 0,
+            'Not Proficient': 0
+        };
+
+        recentResults.forEach(student => {
+            const proficiency = student.latest_result.proficiency;
+            const gender = student.gender;
+            if (gender === 'male') {
+                maleProficiencyCounts[proficiency]++;
+            } else if (gender === 'female') {
+                femaleProficiencyCounts[proficiency]++;
+            }
+        });
+
+        const barChartData = {
+            labels: Object.keys(maleProficiencyCounts),
+            datasets: [
+                {
+                    label: 'Male',
+                    data: Object.values(maleProficiencyCounts),
+                    backgroundColor: '#36A2EB',
+                },
+                {
+                    label: 'Female',
+                    data: Object.values(femaleProficiencyCounts),
+                    backgroundColor: '#FF6384',
+                }
+            ]
+        };
+
+        const barCtx = document.getElementById('myBarChart').getContext('2d');
+        new Chart(barCtx, {
+            type: 'bar',
+            data: barChartData,
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                }
+            }
+        });
+    }
+</script>
+</body>
+</html>
